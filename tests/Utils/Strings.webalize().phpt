@@ -10,6 +10,14 @@ use Tester\Assert;
 require __DIR__ . '/../bootstrap.php';
 
 
+test('ASCII input and slug options', function () {
+	Assert::same('', Strings::webalize(''));
+	Assert::same('a-b', Strings::webalize(" A\x00\x7F\tB "));
+	Assert::same('foo_bar.baz', Strings::webalize(' Foo_Bar.BAZ! ', '_.'));
+	Assert::same('Foo_Bar.BAZ', Strings::webalize(' Foo_Bar.BAZ! ', '_.', lower: false));
+});
+
+
 Assert::same(
 	'zlutoucky-kun-oeooo',
 	Strings::webalize('&ŽLUŤOUČKÝ KŮŇ öőôo!'),
@@ -24,7 +32,7 @@ if (class_exists('Transliterator') && Transliterator::create('Any-Latin; Latin-A
 
 Assert::same('a-b', Strings::webalize("a\u{A0}b")); // non-breaking space
 Assert::exception(
-	fn() => Strings::toAscii("0123456789\xFF"),
+	fn() => Strings::webalize("0123456789\xFF"),
 	Nette\Utils\RegexpException::class,
 	null,
 	PREG_BAD_UTF8_ERROR,

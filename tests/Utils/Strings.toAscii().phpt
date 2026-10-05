@@ -11,6 +11,40 @@ use Tester\Assert;
 require __DIR__ . '/../bootstrap.php';
 
 
+test('ASCII input is sanitized before returning', function () {
+	Assert::same('', Strings::toAscii(''));
+	Assert::same('ASCII ? ~', Strings::toAscii('ASCII ? ~'));
+	Assert::same("\t\n\r", Strings::toAscii(implode('', array_map(chr(...), range(0, 31))) . "\x7F"));
+	Assert::same("a?\t\n\rb", Strings::toAscii("a\x00?\x08\t\n\x0B\x0C\r\x1F\x7Fb"));
+});
+
+test('Malformed UTF-8 is rejected', function () {
+	foreach (["ASCII\x80", "ASCII\xC3", "ASCII\xC0\xAF", "ASCII\xED\xA0\x80"] as $input) {
+		Assert::exception(
+			fn() => Strings::toAscii($input),
+			Nette\Utils\RegexpException::class,
+			null,
+			PREG_BAD_UTF8_ERROR,
+		);
+	}
+});
+
+test('Repeated transliteration across scripts', function () {
+	$cases = [
+		"\u{17D}lu\u{165}ou\u{10D}k\u{FD} k\u{16F}\u{148}" => 'Zlutoucky kun',
+		"\u{391}\u{3B8}\u{3AE}\u{3BD}\u{3B1}\u{2192}\u{41C}\u{43E}\u{441}\u{43A}\u{432}\u{430}" => 'Athena->Moskva',
+		"Ta\u{2BE}rikh?" => 'Tarikh?',
+		"\u{6771}\u{4EAC}" => 'dong jing',
+	];
+	for ($i = 0; $i < 3; $i++) {
+		foreach ($cases as $input => $expected) {
+			Assert::same($expected, Strings::toAscii($input));
+			Assert::same('ASCII ?', Strings::toAscii('ASCII ?'));
+		}
+	}
+});
+
+
 Assert::same('ZLUTOUCKY KUN oeooo--', Strings::toAscii("\u{17D}LU\u{164}OU\u{10C}K\u{DD} K\u{16E}\u{147} \u{F6}\u{151}\u{F4}o\x2d\u{2013}")); // ŽLUŤOUČKÝ KŮŇ öőôo
 Assert::same('Zlutoucky kun', Strings::toAscii("Z\u{30C}lut\u{30C}ouc\u{30C}ky\u{301} ku\u{30A}n\u{30C}")); // Žluťoučký kůň with combining characters
 Assert::same('Z `\'"^~?', Strings::toAscii("\u{17D} `'\"^~?"));
