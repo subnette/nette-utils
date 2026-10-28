@@ -250,6 +250,9 @@ class Html implements \ArrayAccess, \Countable, \IteratorAggregate, HtmlStringab
 	/** @var array<int, self|string> nodes */
 	protected array $children = [];
 
+	/** @var array<string, array<string, string|true>> parsed el() selectors */
+	private static array $selectorCache = [];
+
 	/** element's name */
 	private string $name = '';
 
@@ -274,8 +277,20 @@ class Html implements \ArrayAccess, \Countable, \IteratorAggregate, HtmlStringab
 		}
 
 		if (isset($parts[1])) {
-			foreach (Strings::matchAll($parts[1] . ' ', '#([a-z0-9:-]+)(?:=(["\'])?(.*?)(?(2)\2|\s))?#i') as $m) {
-				$el->attrs[$m[1]] = $m[3] ?? true;
+			$parsed = self::$selectorCache[$parts[1]] ?? null;
+			if ($parsed === null) {
+				$parsed = [];
+				foreach (Strings::matchAll($parts[1] . ' ', '#([a-z0-9:-]+)(?:=(["\'])?(.*?)(?(2)\2|\s))?#i') as $m) {
+					$parsed[$m[1]] = $m[3] ?? true;
+				}
+
+				if (count(self::$selectorCache) < 500) {
+					self::$selectorCache[$parts[1]] = $parsed;
+				}
+			}
+
+			foreach ($parsed as $k => $v) {
+				$el->attrs[$k] = $v;
 			}
 		}
 
@@ -858,6 +873,11 @@ class Html implements \ArrayAccess, \Countable, \IteratorAggregate, HtmlStringab
 				$value = (string) $value;
 			}
 
+			if (strpbrk($value, '&"`') === false) { // fast path: nothing to escape
+				$s .= ' ' . $key . '="' . $value . '"';
+				continue;
+			}
+
 			$q = str_contains($value, '"') ? "'" : '"';
 			$s .= ' ' . $key . '=' . $q
 				. str_replace(
@@ -869,8 +889,7 @@ class Html implements \ArrayAccess, \Countable, \IteratorAggregate, HtmlStringab
 				. $q;
 		}
 
-		$s = str_replace('@', '&#64;', $s);
-		return $s;
+		return str_contains($s, '@') ? str_replace('@', '&#64;', $s) : $s;
 	}
 
 
