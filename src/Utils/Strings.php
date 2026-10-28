@@ -706,6 +706,10 @@ class Strings
 	}
 
 
+	/** @var array<string, array<string, true>> */
+	private static array $validPatterns = [];
+
+
 	/**
 	 * @param  callable-string  $func
 	 * @param  list<mixed>  $args
@@ -713,10 +717,20 @@ class Strings
 	 */
 	public static function pcre(string $func, array $args): mixed
 	{
-		$res = Callback::invokeSafe($func, $args, function (string $message) use ($args): void {
-			// compile-time error, not detectable by preg_last_error
-			throw new RegexpException($message . ' in pattern: ' . implode(' or ', (array) $args[0]));
-		});
+		// patterns that already compiled successfully cannot raise compile-time warnings again,
+		// so the (expensive) temporary error handler is needed only on the first use
+		$pattern = $args[0];
+		if (is_string($pattern) && isset(self::$validPatterns[$func][$pattern])) {
+			$res = $func(...$args);
+		} else {
+			$res = Callback::invokeSafe($func, $args, function (string $message) use ($args): void {
+				// compile-time error, not detectable by preg_last_error
+				throw new RegexpException($message . ' in pattern: ' . implode(' or ', (array) $args[0]));
+			});
+			if (is_string($pattern) && count(self::$validPatterns[$func] ?? []) < 2000) {
+				self::$validPatterns[$func][$pattern] = true;
+			}
+		}
 
 		if (($code = preg_last_error()) // run-time error, but preg_last_error & return code are liars
 			&& ($res === null || !in_array($func, ['preg_filter', 'preg_replace_callback', 'preg_replace'], strict: true))
